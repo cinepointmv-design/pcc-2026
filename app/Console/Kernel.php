@@ -12,7 +12,8 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // $schedule->command('inspire')->hourly();
+        // Run the student check every day at midnight (00:00)
+        $schedule->command('students:mark-completed')->everyMinute();
     }
 
     /**

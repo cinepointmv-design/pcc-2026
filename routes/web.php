@@ -90,7 +90,7 @@ Route::post('/update-students/{id}', [ClientController::class, 'updateStudents']
 Route::get('/delete-followups/{id}', [ClientController::class, 'deleteFollowups']);
 Route::match(['get', 'post'],'/remove-students', [ClientController::class,'removeStudents'] );
 Route::post('/delete-single-student/{id}', [ClientController::class,'deleteSingleStudent'] );
-
+Route::get('/student/complete/{id}', [ClientController::class, 'markCompleted']);
 Route::get('/get-course-details/{id}', [ClientController::class,'getCourseDetails']);
 Route::get('/get-multiple-course-details/{ids}',[ClientController::class,'getMultipleCourseDetails']);
 Route::get('/fetch-search-course-name/{courseId}', [ClientController::class, 'fetchSearchCourseName']);
@@ -150,6 +150,30 @@ Route::get('/fetch-seats/{batch_id}', [ClientController::class, 'fetchSeats']);
 Route::get('/delete-batch/{id}', [ClientController::class, 'deleteBatch']);
 Route::get('/get-batches-by-lab-number/{labNumber}', [ClientController::class, 'getBatchesByLabNumber']);
 Route::get('/get-batches-by-course/{course_id}', [ClientController::class, 'getBatchesByCourse']);
+Route::get('/force-update', function() {
+    // This forces the specific command to run immediately, ignoring the schedule
+    \Illuminate\Support\Facades\Artisan::call('students:mark-completed');
+    return "Force Update Successful! Go check your Dashboard now.";
+});
 
+Route::get('/fix-cron-permissions', function() {
+    // 1. Clear the specific cache key that is stuck
+    \Illuminate\Support\Facades\Cache::forget('last_student_cron_run');
+    
+    // 2. Clear system caches
+    \Illuminate\Support\Facades\Artisan::call('cache:clear');
+    \Illuminate\Support\Facades\Artisan::call('config:clear');
+    
+    return "✅ System Cleaned! The 'Stuck' time is deleted. Please wait 2 minutes for the Cron Job to create a new, fresh time.";
+});
 
+Route::get('/run-automatic-check', function() {
+    // 1. Run the student check command
+    \Illuminate\Support\Facades\Artisan::call('students:mark-completed');
+    
+    // 2. Save time to file (so your dashboard turns Green)
+    file_put_contents(public_path('last_check.txt'), now());
+    
+    return 'Cron Job Success';
+});
 

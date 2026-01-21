@@ -6,7 +6,7 @@
     <div class="form-col">
         <div class="container">
             <div class="row">
-                <div class="col-md-12 row align-items-center heading-wrapper">
+                <div class="col-md-12 row align-items-center heading-wrapper mb-4">
                     <div class="col-md-6 col-12">
                         <h1>Create Client</h1>
                     </div>
@@ -41,7 +41,8 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-12 m-auto">
+                
+                <div class="col-md-10 m-auto">
                     @php
                     $storedServices = session('storedServices', []);
                     @endphp
@@ -49,53 +50,82 @@
                     <form action="{{ url('/create-client-4') }}" method="post" class="create-form">
                         @csrf
                         
-                        @if(is_array($storedServices) && count($storedServices) > 0)
-                            @foreach ($storedServices as $serviceData)
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <label>Service Selected<sup>*</sup></label>
-                                        <input type="text" required readonly value="{{ $serviceData['service_name'] ?? '' }}">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label>Service Charges (in RS)<sup>*</sup></label>
-                                        {{-- Class 'service-charge' used for calculation --}}
-                                        <input type="number" name="charges[]" class="service-charge" required value="{{ $serviceData['charges'] ?? 0 }}">
-                                    </div>
-                                </div>
-                                <div class="col-md-12">
-                                    <label>Description</label>
-                                    <textarea rows="2" readonly>{{ $serviceData['description'] ?? '' }}</textarea>
-                                </div>
-                            @endforeach
-                            <hr>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <label>Total Amount To Be Paid (in RS)<sup>*</sup></label>
-                                    <input type="number" required name="total_payment" id="total_payment">
-                                </div>
-                               
-                                <div class="col-md-6">
-                                    <label>Paid Amount (In Rupees)</label>
-                                    <input type="number" required name="payable_amount" id="payable_amount">
-                                </div>
+                        <div class="card shadow-sm border-0 mb-4">
+                            <div class="card-header bg-white border-bottom pt-4 pb-3">
+                                <h5 class="mb-0 font-weight-bold text-primary">Selected Services</h5>
+                            </div>
+                            <div class="card-body">
+                                @if(is_array($storedServices) && count($storedServices) > 0)
+                                    @foreach ($storedServices as $serviceData)
+                                        <div class="service-item bg-light p-3 rounded mb-3 border">
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="form-group mb-2">
+                                                        <label class="small text-muted font-weight-bold text-uppercase">Service Selected<sup>*</sup></label>
+                                                        <input type="text" class="form-control-plaintext font-weight-bold pl-0" required readonly value="{{ $serviceData['service_name'] ?? '' }}">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="form-group mb-2">
+                                                        <label class="small text-muted font-weight-bold text-uppercase">Service Charges (RS)<sup>*</sup></label>
+                                                        {{-- IMPORTANT: Class 'service-charge' kept for calculation JS --}}
+                                                        <input type="number" name="charges[]" class="form-control service-charge font-weight-bold" required value="{{ $serviceData['charges'] ?? 0 }}">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <div class="form-group mb-0">
+                                                        <label class="small text-muted">Description</label>
+                                                        <textarea class="form-control bg-white" rows="2" readonly>{{ $serviceData['description'] ?? '' }}</textarea>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                @else
+                                    <div class="alert alert-warning">No services selected. Please return to Step 1.</div>
+                                @endif
+                            </div>
+                        </div>
 
-                                <div class="col-md-6">
-                                    <label>Pending Amount (In Rupees)</label>
-                                    <input type="number" readonly required name="pending_amount" id="pending_amount">
-                                </div>
-                                <div class="col-md-6 date-div">
-                                    <label>Next Due<sup>*</sup></label>
-                                    <input type="date" required id="nextDueDate" name="next_due_date">
+                        <div class="card shadow-sm border-0">
+                            <div class="card-header bg-white border-bottom pt-4 pb-3">
+                                <h5 class="mb-0 font-weight-bold text-success">Payment Details</h5>
+                            </div>
+                            <div class="card-body pt-4">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <div class="form-group">
+                                            <label class="font-weight-bold">Total Amount To Be Paid (RS)<sup>*</sup></label>
+                                            <input type="number" required name="total_payment" id="total_payment" class="form-control form-control-lg font-weight-bold text-dark bg-light" readonly>
+                                        </div>
+                                    </div>
+                                   
+                                    <div class="col-md-6 mb-3">
+                                        <div class="form-group">
+                                            <label class="font-weight-bold text-success">Paid Amount (RS)</label>
+                                            <input type="number" required name="payable_amount" id="payable_amount" class="form-control form-control-lg border-success" placeholder="0">
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <div class="form-group">
+                                            <label class="font-weight-bold text-danger">Pending Amount (RS)</label>
+                                            <input type="number" readonly required name="pending_amount" id="pending_amount" class="form-control form-control-lg bg-light text-danger font-weight-bold border-danger">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-6 mb-3 date-div">
+                                        <div class="form-group">
+                                            <label class="font-weight-bold">Next Due<sup>*</sup></label>
+                                            <input type="date" required id="nextDueDate" name="next_due_date" class="form-control form-control-lg">
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        @else
-                            <div class="alert alert-warning">No services selected. Please return to Step 1.</div>
-                        @endif
-    
-                        <div class="col-md-12">
-                            <div class="form-btn-col">
-                                <button id="simulate-payment-button" class="btn">Submit</button>
-                                <button onclick="goback()" type="button" class="btn btn-second">Back</button>
+                            
+                            <div class="card-footer bg-white border-0 py-4 text-right">
+                                <button onclick="goback()" type="button" class="btn btn-outline-secondary mr-2 btn-lg px-4">Back</button>
+                                <button id="simulate-payment-button" class="btn btn-primary btn-lg px-5">Submit</button>
                             </div>
                         </div>
                     </form>

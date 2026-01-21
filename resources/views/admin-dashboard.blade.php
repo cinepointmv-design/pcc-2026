@@ -5,14 +5,20 @@
 
     
 
-            <!-- chart section -->
             <div class="chart-col">
                 <div class="container">
                     <div class="row">
-                        <!-- welcome -->
                         <div class="col-md-12 m-auto">
                             <div class="card p-5">
-                                <div class=" col-md-12 justify-content-between align-items-center">
+                                <div class=" col-md-12 justify-content-between align-items-center position-relative">
+                                    
+                                    {{-- NEW: Last Updated Label --}}
+                                   <div style="position: absolute; top: 0; right: 0;">
+                                        <span class="badge {{ $badgeClass }} border" style="font-size: 12px; padding: 6px 10px;">
+                                            <i class="fa fa-clock-o"></i> System Auto-Check: {{ $lastRunText }}
+                                        </span>
+                                    </div>
+
                                     <h3 style="text-transform: capitalize;
                                     font-weight: 600;
                                     margin-bottom: 12px;">Hi, Welcome Back To <span >Client Dashboard</span>
@@ -63,4 +69,3 @@
 
     </main>
  @endsection
-    

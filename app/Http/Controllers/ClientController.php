@@ -24,7 +24,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use App\Models\ClientPayments;
 use Illuminate\Support\Facades\DB;
-
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 
@@ -40,17 +40,38 @@ class ClientController extends Controller
         return view('owner-login');
     }
     
-    public function adminDashboard()
-{  
-    $client_id = session('client_id');
-    $studentsCount = Students::where('client_id',$client_id)->count();
-    $inquiriesCount = Enquiry::where('client_id',$client_id)->where('status', '!=', 'lead')->count();
-    $coursesCount = Courses::where('client_id',$client_id)->count();
-    $labsCount = Lab::where('client_id',$client_id)->count();
+   public function adminDashboard()
+    {  
+        $client_id = session('client_id');
+        
+        // 1. Get Counts
+        $studentsCount = Students::where('client_id', $client_id)->count();
+        $inquiriesCount = Enquiry::where('client_id', $client_id)->where('status', '!=', 'lead')->count();
+        $coursesCount = Courses::where('client_id', $client_id)->count();
+        $labsCount = Lab::where('client_id', $client_id)->count();
 
-    // Pass the counts to the view
-    return view('admin-dashboard', compact('studentsCount', 'inquiriesCount', 'coursesCount', 'labsCount'));
-}
+        // 2. READ TIME FROM FILE (Reliable method)
+        $lastRunText = 'Pending...';
+        $badgeClass = 'border-danger text-danger bg-light'; 
+
+        $filePath = public_path('last_check.txt');
+        
+        if (file_exists($filePath)) {
+            $lastRun = file_get_contents($filePath);
+            
+            if ($lastRun) {
+                $lastRunDate = \Carbon\Carbon::parse($lastRun);
+                $lastRunText = $lastRunDate->diffForHumans();
+
+                // Green if run in the last 60 minutes
+                if ($lastRunDate->diffInMinutes(now()) <= 60) {
+                    $badgeClass = 'border-success text-success bg-light'; 
+                }
+            }
+        }
+
+        return view('admin-dashboard', compact('studentsCount', 'inquiriesCount', 'coursesCount', 'labsCount', 'lastRunText', 'badgeClass'));
+    }
 
     public function dashboard()
     {  
@@ -174,17 +195,21 @@ class ClientController extends Controller
         return view('admin-create-enquiry')->with('courses', $courses);
     }
 
-    public function viewenquiry()
+    public function viewenquiry(Request $request)
     {
         $client_id = session('client_id');
-    
+        
+        // 1. Fetch Enquiries (Default view)
         $enquiry = Enquiry::where('client_id', $client_id)
-                          ->where('status', '!=', 'lead')
-                          ->with('course')
-                          ->orderBy('created_at', 'desc')
-                          ->paginate(50);
+                        ->where('status', '!=', 'lead')
+                        ->with('course')
+                        ->orderBy('created_at', 'desc')
+                        ->paginate(50);
+
+        // 2. Fetch Courses (For the Filter Dropdown)
+        $courses = Courses::where('client_id', $client_id)->get();
     
-        return view('admin-enquiry')->with('enquiry', $enquiry);
+        return view('admin-enquiry', compact('enquiry', 'courses'));
     }
 
     public function saveEnquiry(Request $request)
@@ -559,17 +584,36 @@ public function updatefollowup(Request $request,$id)
     }
 
 
-    public function viewStudents()
-    {   
-        $client_id = session('client_id');
-    
-        $students = Students::where('client_id', $client_id)
-                             ->with('studentCourses')
-                             ->orderBy('created_at', 'desc') 
-                             ->paginate(50);
-    
-        return view('students')->with('students', $students);
+    public function viewStudents(Request $request)
+{   
+    $client_id = session('client_id');
+    $status = $request->input('status');
+
+    // 1. Calculate Counts
+    $activeCount = Students::where('client_id', $client_id)
+        ->where(function($q) { $q->where('status', 'Active')->orWhereNull('status'); })
+        ->count();
+
+    $completedCount = Students::where('client_id', $client_id)->where('status', 'Completed')->count();
+    $removedCount = Students::where('client_id', $client_id)->where('status', 'Removed')->count();
+
+    // 2. Base Query
+    $query = Students::where('client_id', $client_id)->with('studentCourses');
+
+    // 3. Filter Logic
+    if ($status == 'completed') {
+        $query->where('status', 'Completed');
+    } elseif ($status == 'removed') {
+        $query->where('status', 'Removed');
+    } else {
+        // Default: Show Active students
+        $query->where(function($q) { $q->where('status', 'Active')->orWhereNull('status'); });
     }
+
+    $students = $query->orderBy('created_at', 'desc')->paginate(50);
+
+    return view('students', compact('students', 'activeCount', 'completedCount', 'removedCount'));
+}
 
     public function viewMoreStudents(Request $request,$id)
     {   
@@ -806,25 +850,18 @@ public function updatefollowup(Request $request,$id)
 
     
     }
-
-    public function deleteSingleStudent(Request $request, $id)
-{   
+    
+    public function markCompleted($id)
+{
     $client_id = session('client_id');
-    $selectedStudent = $id;
+    $student = Students::find($id);
 
-    if ($selectedStudent) {
-        // Get the course IDs associated with the selected student
-        $courseIDs = StudentCourse::where('student_id', $selectedStudent)->pluck('course_id')->toArray();
-
-        // Get distinct batches associated with the selected student
-        $studentBatches = StudentCourse::where('student_id', $selectedStudent)->distinct()->pluck('batch')->toArray();
-
-       
-
-        // Array to keep track of batches for which seats have already been incremented
+    if ($student) {
+        // 1. Logic to Free up Seats (Same logic as delete)
+        $courseIDs = StudentCourse::where('student_id', $id)->pluck('course_id')->toArray();
+        $studentBatches = StudentCourse::where('student_id', $id)->distinct()->pluck('batch')->toArray();
         $processedBatches = [];
 
-        // Get the courses with the corresponding labs
         $coursesWithLab = Courses::where('client_id', $client_id)
             ->with('lab')
             ->whereIn('id', $courseIDs)
@@ -832,32 +869,66 @@ public function updatefollowup(Request $request,$id)
 
         foreach ($coursesWithLab as $course) {
             $lab = $course->lab_number;
-            
-            // Get all batches associated with the lab
             $labBatches = Batch::where('lab_id', $lab)->pluck('batch')->toArray();
-
-            // Find batches that match both lab batches and student batches
-            $matchingBatches = array_intersect($labBatches, $studentBatches);
-
-            // Increment seats for the matching batches, but only for batches that haven't been processed yet
+            
             foreach ($studentBatches as $batch) {
                 if (!in_array($batch, $processedBatches)) {
+                    // Free the seat
                     Batch::where('id', $batch)->increment('pending_seats', 1);
                     $processedBatches[] = $batch;
                 }
             }
         }
 
-        // Delete the student and related entries
-        Students::where('id', $selectedStudent)->delete();
-        StudentFees::where('student_id', $selectedStudent)->delete();
-        StudentCourse::where('student_id', $selectedStudent)->delete();
+        // 2. Update Status
+        $student->status = 'Completed';
+        $student->save();
 
-        return redirect('/students')->with('success', 'Selected Student has been deleted.');
+        return redirect()->back()->with('success', 'Student Course Completed and seat freed!');
     }
 
-    return redirect()->back()->with('error', 'No Student was selected for deletion.');
-}  
+    return redirect()->back()->with('error', 'Student not found.');
+}
+
+    public function deleteSingleStudent(Request $request, $id)
+{   
+    $client_id = session('client_id');
+    $student = Students::find($id);
+
+    if ($student) {
+        // 1. Logic to Free up Seats (Copied from your existing logic)
+        $courseIDs = StudentCourse::where('student_id', $id)->pluck('course_id')->toArray();
+        $studentBatches = StudentCourse::where('student_id', $id)->distinct()->pluck('batch')->toArray();
+        $processedBatches = [];
+
+        $coursesWithLab = Courses::where('client_id', $client_id)
+            ->with('lab')
+            ->whereIn('id', $courseIDs)
+            ->get();
+
+        foreach ($coursesWithLab as $course) {
+            $lab = $course->lab_number;
+            $labBatches = Batch::where('lab_id', $lab)->pluck('batch')->toArray();
+            $matchingBatches = array_intersect($labBatches, $studentBatches);
+
+            foreach ($studentBatches as $batch) {
+                if (!in_array($batch, $processedBatches)) {
+                    // This line frees the seat
+                    Batch::where('id', $batch)->increment('pending_seats', 1);
+                    $processedBatches[] = $batch;
+                }
+            }
+        }
+
+        // 2. Mark as Removed instead of Delete
+        $student->status = 'Removed';
+        $student->save();
+
+        return redirect()->back()->with('success', 'Student moved to Removed list and seat emptied.');
+    }
+
+    return redirect()->back()->with('error', 'Student not found.');
+} 
 
 public function getBatchesByCourse($course_id)
 {
@@ -1464,32 +1535,76 @@ public function getCourseList()
 }
 
 public function searchEnquiry(Request $request)
-{
-    $client_id = session('client_id');
-    $search = $request->input('searchText');
+    {
+        $client_id = session('client_id');
+        
+        $searchText = $request->input('searchText');
+        $dateFilter = $request->input('dateFilter');
+        $statusFilter = $request->input('statusFilter');
+        $courseFilter = $request->input('courseFilter');
 
+        // Start Query
+        $query = Enquiry::where('client_id', $client_id)->with('course');
 
-    $enquiry = Enquiry::where('client_id', $client_id)->with('course')
-    ->where(function ($query) use ($search) {
-        $query->where("name", "LIKE", "%$search%")
-            ->orWhere("phone", "LIKE", "%$search%");
-    });
+        // 1. Text Search (Name or Phone)
+        if (!empty($searchText)) {
+            $searchLower = strtolower($searchText);
+            $query->where(function($q) use ($searchText, $searchLower) {
+                $q->whereRaw("LOWER(name) LIKE ?", ["%{$searchLower}%"])
+                  ->orWhere("phone", "LIKE", "%{$searchText}%");
+            });
+        }
 
-    $enquiries = $enquiry->get();
+        // 2. Date Filter
+        if (!empty($dateFilter) && $dateFilter !== 'all') {
+            $dateCol = 'created_at';
+            switch ($dateFilter) {
+                case 'today':
+                    $query->whereDate($dateCol, Carbon::today());
+                    break;
+                case 'yesterday':
+                    $query->whereDate($dateCol, Carbon::yesterday());
+                    break;
+                case '5_days':
+                    $query->where($dateCol, '>=', Carbon::now()->subDays(5));
+                    break;
+                case '1_week':
+                    $query->where($dateCol, '>=', Carbon::now()->subWeek());
+                    break;
+                case '1_month':
+                    $query->where($dateCol, '>=', Carbon::now()->subMonth());
+                    break;
+            }
+        }
 
+        // 3. Status Filter
+        if (!empty($statusFilter) && $statusFilter !== 'all') {
+            $query->where('status', $statusFilter);
+        }
 
-    if ($enquiries->isNotEmpty()) {
-           
-        // Pass the retrieved data to the view for rendering
-        return response()->json(['enquiry' => $enquiries,'query' => $search]);
-    } else {
-        // Handle case when the student with the given number is not found
-        return response()->json(['error' => 'Enquiry not found']);
+        // 4. Course Filter
+        if (!empty($courseFilter) && $courseFilter !== 'all') {
+            // Check if JSON contains the ID (e.g. '["1","5"]' contains "1")
+            $query->where('course_id', 'LIKE', '%"' . $courseFilter . '"%');
+        }
+
+        // Execute Query
+        $enquiries = $query->orderBy('created_at', 'desc')->get();
+        
+        // Return Data + Count
+        if ($enquiries->isNotEmpty()) {
+            return response()->json([
+                'status' => 'success', 
+                'enquiry' => $enquiries, 
+                'count' => $enquiries->count()
+            ]);
+        } else {
+            return response()->json([
+                'status' => 'error', 
+                'count' => 0
+            ]);
+        }
     }
-    
-    
-
-}
 
 
 

@@ -1,4 +1,3 @@
-
 @extends('layouts.admin-main')
 
 
@@ -101,11 +100,23 @@
                
                 <div class="col-md-12">
                     <div class="form-btn-col">
+                        {{-- NEW: Mark As Complete Button (Green) --}}
+                        @if($student->status != 'Completed' && $student->status != 'Removed')
+                            <a href="{{ url('/student/complete/'.$student->id) }}" 
+                               class="btn" 
+                               style="background-color: #198754; color: white; border: 1px solid #198754;"
+                               onclick="return confirm('Mark as Completed? This will free up the seat.')">
+                               Mark As Complete
+                            </a>
+                        @endif
+
                         <a href="" class= " btn view-payment-logs" data-student-id="{{ $student->id }}">View Payments log</a>
                         <a class="btn" href="{{url('/edit-students/' . $student->id )}}">Edit</a>
-                        <button class="btn " onclick="return  confirmDelete()" type="submit" style="background: rgb(248, 54, 54)" href="" >Delete</button>
-                        <button onclick="goback()" type="button" class="btn btn-second">Back</button>
                         
+                        {{-- UPDATED: Renamed Delete to Remove --}}
+                        <button class="btn " onclick="return  confirmDelete()" type="submit" style="background: rgb(248, 54, 54)" href="" >Remove</button>
+                        
+                        <button onclick="goback()" type="button" class="btn btn-second">Back</button>
                     </div>
                 </div>
             </div>
@@ -127,8 +138,7 @@
                             </tr>
                         </thead>
                         <tbody id="paymentLogTableBody">
-                            <!-- Table rows will be dynamically added here -->
-                        </tbody>
+                            </tbody>
                     </table>
                 </div>
             </div>
@@ -137,7 +147,6 @@
   </div>
   @endforeach
 </div>
-    <!-- Add jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.tiny.cloud/1/YOUR_API_KEY/tinymce/5/tinymce.min.js" referrerpolicy="origin"></script>
 
@@ -189,7 +198,7 @@ $(document).ready(function () {
     });
 
 function confirmDelete() {
-            return confirm('Are you sure to delete ?');
+            return confirm('Are you sure to remove?');
         }
 
         $(document).ready(function() {
